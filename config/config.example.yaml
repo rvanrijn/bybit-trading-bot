@@ -1,0 +1,17 @@
+bybit:
+  testnet: true
+  api_key: "your_api_key"
+  api_secret: "your_api_secret"
+
+trading:
+  symbol: "BTCUSDT"
+  leverage: 1
+  position_size: 0.001  # Base position size in BTC
+  risk_reward_ratio: 2.0
+  atr_multiplier: 1.75
+
+strategy:
+  fast_ema: 8
+  slow_ema: 21
+  stoch_period: 10
+  stoch_k_period: 2
