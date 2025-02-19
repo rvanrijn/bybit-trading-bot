@@ -6,6 +6,7 @@ from typing import Callable
 import pandas as pd
 import logging
 from datetime import datetime
+from pybit.unified_trading import HTTP
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,52 @@ class DataFeed:
         self.reconnect_delay = 5
         self.max_reconnect_delay = 300
         self.ws_lock = threading.Lock()
+        self.session = HTTP(testnet=True)  # Using testnet for paper trading
         logger.info(f"DataFeed initialized for {symbol}")
         
+    def fetch_historical_data(self):
+        """Fetch historical kline data"""
+        try:
+            logger.info("Fetching historical kline data...")
+            
+            # Get last 50 candles (more than we need, just to be safe)
+            response = self.session.get_kline(
+                category="linear",
+                symbol=self.symbol,
+                interval=15,
+                limit=50
+            )
+            
+            if 'result' in response and 'list' in response['result']:
+                # Bybit returns newest first, so reverse to get chronological order
+                candles = reversed(response['result']['list'])
+                
+                for candle in candles:
+                    self.data_buffer.append({
+                        'datetime': pd.to_datetime(int(candle[0]), unit='ms'),
+                        'open': float(candle[1]),
+                        'high': float(candle[2]),
+                        'low': float(candle[3]),
+                        'close': float(candle[4]),
+                        'volume': float(candle[5])
+                    })
+                
+                logger.info(f"Successfully loaded {len(self.data_buffer)} historical candles")
+                
+                # Initial analysis with historical data
+                df = pd.DataFrame(self.data_buffer)
+                df.set_index('datetime', inplace=True)
+                self.strategy_callback(df)
+            
+        except Exception as e:
+            logger.error(f"Error fetching historical data: {e}")
+    
     def start(self):
         """Start the WebSocket connection"""
         self.is_running = True
+        # First get historical data
+        self.fetch_historical_data()
+        # Then connect to WebSocket for real-time updates
         self._connect()
         
     def stop(self):
@@ -42,7 +84,7 @@ class DataFeed:
                 self.ws.close()
                 self.ws = None
             
-            ws_url = "wss://stream.bybit.com/v5/public/linear"
+            ws_url = "wss://stream-testnet.bybit.com/v5/public/linear"  # Using testnet URL
             
             # Configure WebSocket
             self.ws = websocket.WebSocketApp(
