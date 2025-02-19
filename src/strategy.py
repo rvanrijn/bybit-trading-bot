@@ -3,6 +3,7 @@ import numpy as np
 from typing import Tuple, Dict
 import yaml
 import logging
+from datetime import datetime
 from .bybit_client import BybitClient
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,8 @@ class TradingStrategy:
         """Generate trading signals from market data"""
         try:
             df = data.copy()
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            logger.info(f"\n{'='*50}\nAnalyzing market at {current_time}\n{'='*50}")
             
             # Calculate indicators
             df['ema_fast'] = self.calculate_ema(df['close'], self.fast_ema)
@@ -77,23 +80,22 @@ class TradingStrategy:
             current = df.iloc[-1]
             previous = df.iloc[-2]
             
-            # Log current market conditions
-            logger.info(f"Current price: {current['close']:.2f}, "
-                       f"Fast EMA: {current['ema_fast']:.2f}, "
-                       f"Slow EMA: {current['ema_slow']:.2f}, "
-                       f"Stoch K: {current['stoch_k']:.2f}")
+            # Log market conditions
+            logger.info(f"Market Conditions:")
+            logger.info(f"Current BTC Price: ${current['close']:,.2f}")
+            logger.info(f"EMAs - Fast: ${current['ema_fast']:,.2f}, Slow: ${current['ema_slow']:,.2f}")
+            logger.info(f"Stochastic - Previous: {previous['stoch_k']:.1f}, Current: {current['stoch_k']:.1f}")
             
             if not volume_filter.iloc[-1]:
-                logger.info("Volume filter not satisfied - no trade signal")
+                logger.info("DECISION: No trade - Volume too low")
                 return {'signal': 0}
             
             current_price = current['close']
             current_atr = current['atr']
             
-            # Generate trading signals
-            signal = 0
-            stop_loss = None
-            take_profit = None
+            # Check trend direction
+            trend = "BULLISH" if current_price > current['ema_slow'] else "BEARISH"
+            logger.info(f"Overall Trend: {trend}")
             
             # Buy signal conditions
             buy_conditions = (
@@ -109,28 +111,35 @@ class TradingStrategy:
                 previous['stoch_k'] > 80 and current['stoch_k'] < 80
             )
             
-            # Log conditions evaluation
-            logger.info(f"Signal conditions - Buy: {buy_conditions}, Sell: {sell_conditions}")
+            signal = 0
+            stop_loss = None
+            take_profit = None
             
-            # Buy signal
+            # Decision making logic
             if buy_conditions:
                 signal = 1
                 stop_loss = current_price - (current_atr * self.atr_multiplier)
                 take_profit = current_price + (current_atr * self.atr_multiplier * self.risk_reward_ratio)
                 
-                logger.info(f"BUY SIGNAL - Entry: {current_price:.2f}, "
-                           f"Stop Loss: {stop_loss:.2f}, "
-                           f"Take Profit: {take_profit:.2f}")
+                logger.info("DECISION: BUY SIGNAL GENERATED")
+                logger.info(f"Entry Price: ${current_price:,.2f}")
+                logger.info(f"Stop Loss: ${stop_loss:,.2f} (${current_price - stop_loss:,.2f} risk)")
+                logger.info(f"Take Profit: ${take_profit:,.2f} (${take_profit - current_price:,.2f} reward)")
             
-            # Sell signal
             elif sell_conditions:
                 signal = -1
                 stop_loss = current_price + (current_atr * self.atr_multiplier)
                 take_profit = current_price - (current_atr * self.atr_multiplier * self.risk_reward_ratio)
                 
-                logger.info(f"SELL SIGNAL - Entry: {current_price:.2f}, "
-                           f"Stop Loss: {stop_loss:.2f}, "
-                           f"Take Profit: {take_profit:.2f}")
+                logger.info("DECISION: SELL SIGNAL GENERATED")
+                logger.info(f"Entry Price: ${current_price:,.2f}")
+                logger.info(f"Stop Loss: ${stop_loss:,.2f} (${stop_loss - current_price:,.2f} risk)")
+                logger.info(f"Take Profit: ${take_profit:,.2f} (${current_price - take_profit:,.2f} reward)")
+            
+            else:
+                logger.info("DECISION: No trade - Conditions not met")
+                logger.info(f"Buy Conditions Met: {buy_conditions}")
+                logger.info(f"Sell Conditions Met: {sell_conditions}")
             
             return {
                 'signal': signal,
@@ -175,7 +184,7 @@ class TradingStrategy:
                         'stop_loss': signal_data['stop_loss'],
                         'take_profit': signal_data['take_profit']
                     }
-                    logger.info(f"Entered {side} position at {signal_data['current_price']}")
+                    logger.info(f"ORDER EXECUTED: Entered {side} position at ${signal_data['current_price']:,.2f}")
         
         except Exception as e:
             logger.error(f"Error handling new data: {e}")
