@@ -5,6 +5,7 @@ import time
 from typing import Callable
 import pandas as pd
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,8 @@ class DataFeed:
         self.is_running = True
         self.reconnect_delay = 5
         self.max_reconnect_delay = 300
-        self.ws_lock = threading.Lock()  # Add thread lock for WebSocket operations
+        self.ws_lock = threading.Lock()
+        logger.info(f"DataFeed initialized for {symbol}")
         
     def start(self):
         """Start the WebSocket connection"""
@@ -64,10 +66,9 @@ class DataFeed:
                     if self.ws:
                         self.ws.run_forever()
                 
-                if self.is_running:  # Only reconnect if we're still supposed to run
+                if self.is_running:
                     logger.info(f"WebSocket disconnected. Reconnecting in {self.reconnect_delay} seconds...")
                     time.sleep(self.reconnect_delay)
-                    # Implement exponential backoff
                     self.reconnect_delay = min(self.reconnect_delay * 2, self.max_reconnect_delay)
                     self._connect()
             except Exception as e:
@@ -80,6 +81,11 @@ class DataFeed:
             data = json.loads(message)
             if 'topic' in data and data['topic'] == f'kline.15m.{self.symbol}':
                 kline = data['data']
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                logger.info(f"Received new kline data at {current_time}")
+                logger.info(f"Candle: Open: ${float(kline['open']):,.2f}, Close: ${float(kline['close']):,.2f}, " +
+                          f"High: ${float(kline['high']):,.2f}, Low: ${float(kline['low']):,.2f}")
+                
                 self.data_buffer.append({
                     'datetime': pd.to_datetime(kline['timestamp'], unit='ms'),
                     'open': float(kline['open']),
@@ -92,6 +98,8 @@ class DataFeed:
                 # Keep last 100 candles for analysis
                 if len(self.data_buffer) > 100:
                     self.data_buffer.pop(0)
+                
+                logger.info(f"Current buffer size: {len(self.data_buffer)} candles")
                 
                 # Convert to DataFrame and pass to strategy
                 df = pd.DataFrame(self.data_buffer)
