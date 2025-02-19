@@ -31,6 +31,9 @@ class TradingStrategy:
         
         # Track current position
         self.current_position = None
+        
+        logger.info(f"Strategy initialized with parameters: Fast EMA: {self.fast_ema}, Slow EMA: {self.slow_ema}, "
+                   f"Stoch Period: {self.stoch_period}, Stoch K: {self.stoch_k_period}")
     
     def calculate_ema(self, data: pd.Series, period: int) -> pd.Series:
         """Calculate Exponential Moving Average"""
@@ -74,7 +77,14 @@ class TradingStrategy:
             current = df.iloc[-1]
             previous = df.iloc[-2]
             
+            # Log current market conditions
+            logger.info(f"Current price: {current['close']:.2f}, "
+                       f"Fast EMA: {current['ema_fast']:.2f}, "
+                       f"Slow EMA: {current['ema_slow']:.2f}, "
+                       f"Stoch K: {current['stoch_k']:.2f}")
+            
             if not volume_filter.iloc[-1]:
+                logger.info("Volume filter not satisfied - no trade signal")
                 return {'signal': 0}
             
             current_price = current['close']
@@ -85,27 +95,42 @@ class TradingStrategy:
             stop_loss = None
             take_profit = None
             
+            # Buy signal conditions
+            buy_conditions = (
+                current_price > current['ema_fast'] and
+                current_price > current['ema_slow'] and
+                previous['stoch_k'] < 20 and current['stoch_k'] > 20
+            )
+            
+            # Sell signal conditions
+            sell_conditions = (
+                current_price < current['ema_fast'] and
+                current_price < current['ema_slow'] and
+                previous['stoch_k'] > 80 and current['stoch_k'] < 80
+            )
+            
+            # Log conditions evaluation
+            logger.info(f"Signal conditions - Buy: {buy_conditions}, Sell: {sell_conditions}")
+            
             # Buy signal
-            if (current_price > current['ema_fast'] and
-                    current_price > current['ema_slow'] and
-                    previous['stoch_k'] < 20 and current['stoch_k'] > 20):
-                
+            if buy_conditions:
                 signal = 1
                 stop_loss = current_price - (current_atr * self.atr_multiplier)
                 take_profit = current_price + (current_atr * self.atr_multiplier * self.risk_reward_ratio)
                 
-                logger.info(f"Buy Signal - Price: {current_price}, Stop: {stop_loss}, Target: {take_profit}")
+                logger.info(f"BUY SIGNAL - Entry: {current_price:.2f}, "
+                           f"Stop Loss: {stop_loss:.2f}, "
+                           f"Take Profit: {take_profit:.2f}")
             
             # Sell signal
-            elif (current_price < current['ema_fast'] and
-                    current_price < current['ema_slow'] and
-                    previous['stoch_k'] > 80 and current['stoch_k'] < 80):
-                
+            elif sell_conditions:
                 signal = -1
                 stop_loss = current_price + (current_atr * self.atr_multiplier)
                 take_profit = current_price - (current_atr * self.atr_multiplier * self.risk_reward_ratio)
                 
-                logger.info(f"Sell Signal - Price: {current_price}, Stop: {stop_loss}, Target: {take_profit}")
+                logger.info(f"SELL SIGNAL - Entry: {current_price:.2f}, "
+                           f"Stop Loss: {stop_loss:.2f}, "
+                           f"Take Profit: {take_profit:.2f}")
             
             return {
                 'signal': signal,
@@ -121,6 +146,12 @@ class TradingStrategy:
     def on_new_data(self, df: pd.DataFrame):
         """Handle new market data updates"""
         try:
+            # Check if we have enough data
+            if len(df) < max(self.fast_ema, self.slow_ema, self.stoch_period):
+                logger.info(f"Not enough data yet. Have {len(df)} candles, need at least "
+                           f"{max(self.fast_ema, self.slow_ema, self.stoch_period)}")
+                return
+            
             # Generate signals from new data
             signal_data = self.generate_signals(df)
             
