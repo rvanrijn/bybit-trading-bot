@@ -4,14 +4,30 @@ bybit:
   api_secret: "your_api_secret"
 
 trading:
-  symbol: "BTCUSDT"
-  leverage: 1
-  position_size: 0.001  # Base position size in BTC
+  account_size: 100000  # Base account size in USD
   risk_reward_ratio: 2.0
   atr_multiplier: 1.75
+  kelly_fraction: 0.10  # Using 10% of Kelly
 
 strategy:
   fast_ema: 8
   slow_ema: 21
   stoch_period: 10
   stoch_k_period: 2
+
+assets:
+  - symbol: "BTCUSDT"
+    enabled: true
+    allocation: 0.4  # 40% of capital
+
+  - symbol: "ETHUSDT"
+    enabled: true
+    allocation: 0.3  # 30% of capital
+    
+  - symbol: "SOLUSDT"
+    enabled: true
+    allocation: 0.2  # 20% of capital
+    
+  - symbol: "BNBUSDT"
+    enabled: true
+    allocation: 0.1  # 10% of capital
